@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farming Game</title>
+    <style>
+        /* Global styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #e0f2f7; /* Light blue background */
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            color: #333;
+        }
+
+        /* Game container */
+        .game-container {
+            background-color: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            text-align: center;
+            max-width: 90%;
+            width: 600px;
+            box-sizing: border-box;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #2e7d32; /* Dark green */
+            margin-bottom: 20px;
+            font-size: 2.2em;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Message display area */
+        #message-box {
+            background-color: #fffde7; /* Light yellow */
+            border: 1px solid #ffeb3b; /* Yellow border */
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+            color: #616161;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        /* Game board grid */
+        #game-board {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr); /* 5 columns */
+            grid-gap: 8px;
+            width: 100%;
+            max-width: 500px; /* Max width for the grid */
+            margin: 0 auto 20px auto;
+            background-color: #a1887f; /* Brownish background for the plot */
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Individual plot cell */
+        .plot {
+            width: 80px; /* Fixed width for square plots */
+            height: 80px; /* Fixed height for square plots */
+            background-color: #8d6e63; /* Soil color */
+            border: 2px solid #795548; /* Darker soil border */
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5em; /* Emoji size */
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            user-select: none; /* Prevent text selection */
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+            position: relative; /* For overlays */
+            overflow: hidden; /* To hide overflow of emojis */
+        }
+
+        .plot:hover {
+            background-color: #795548; /* Darker on hover */
+            transform: translateY(-2px);
+        }
+
+        .plot:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Overlay for actions */
+        .plot .action-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.3);
+            color: white;
+            font-size: 0.8em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none; /* Allow clicks to pass through */
+            border-radius: 8px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        .plot:hover .action-overlay {
+            opacity: 1;
+        }
+
+        /* Plant growth stages (emojis) */
+        .plot.empty::before { content: '🕳️'; } /* Empty plot */
+        .plot.planted::before { content: '🌱'; }
+        .plot.watered::before { content: '🌿'; }
+        .plot.ready::before { content: '🌽'; } /* Ready to harvest */
+
+
+        /* Buttons container */
+        .buttons-container {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap; /* Allow buttons to wrap on smaller screens */
+        }
+
+        /* Action buttons */
+        .action-button {
+            background-color: #4CAF50; /* Green */
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 30px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            outline: none; /* Remove outline on focus */
+        }
+
+        .action-button:hover {
+            background-color: #45a049; /* Darker green */
+            transform: translateY(-3px);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .action-button:active {
+            transform: translateY(0);
+            box-shadow: 0 3px 7px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Specific button colors */
+        #plant-mode-btn { background-color: #4CAF50; } /* Green */
+        #water-mode-btn { background-color: #2196F3; } /* Blue */
+        #harvest-mode-btn { background-color: #FFC107; color: #333; } /* Amber */
+
+        #plant-mode-btn.active { background-color: #388e3c; border: 2px solid #2e7d32; }
+        #water-mode-btn.active { background-color: #1976d2; border: 2px solid #1565c0; }
+        #harvest-mode-btn.active { background-color: #ffa000; border: 2px solid #ff8f00; }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .game-container {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            #game-board {
+                grid-template-columns: repeat(4, 1fr); /* 4 columns on smaller screens */
+                max-width: 400px;
+                grid-gap: 6px;
+            }
+
+            .plot {
+                width: 70px;
+                height: 70px;
+                font-size: 2em;
+            }
+
+            .action-button {
+                padding: 10px 20px;
+                font-size: 1em;
+            }
+
+            .buttons-container {
+                flex-direction: column; /* Stack buttons vertically on very small screens */
+                gap: 10px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            #game-board {
+                grid-template-columns: repeat(3, 1fr); /* 3 columns on very small screens */
+                max-width: 300px;
+                grid-gap: 5px;
+            }
+
+            .plot {
+                width: 60px;
+                height: 60px;
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>My Little Farm</h1>
+        <div id="message-box">Loading farm...</div>
+        <div id="game-board">
+            <!-- Plots will be generated here by JavaScript -->
+        </div>
+        <div class="buttons-container">
+            <button id="plant-mode-btn" class="action-button active">Plant 🌱</button>
+            <button id="water-mode-btn" class="action-button">Water 💧</button>
+            <button id="harvest-mode-btn" class="action-button">Harvest 🚜</button>
+        </div>
+    </div>
+
+    <script>
+        // Backend API base URL
+        const API_BASE_URL = 'http://localhost:3000/api';
+
+        // Game configuration (should match backend)
+        const ROWS = 4;
+        const COLS = 5;
+
+        // Game state (will be fetched from backend)
+        let currentBoardState = []; // Stores the current state received from the backend
+        let currentAction = 'plant'; // 'plant', 'water', or 'harvest'
+
+        // DOM elements
+        const gameBoardElement = document.getElementById('game-board');
+        const messageBox = document.getElementById('message-box');
+        const plantModeBtn = document.getElementById('plant-mode-btn');
+        const waterModeBtn = document.getElementById('water-mode-btn');
+        const harvestModeBtn = document.getElementById('harvest-mode-btn');
+
+        /**
+         * Fetches the current game state from the backend and updates the display.
+         */
+        async function fetchGameState() {
+            updateMessageBox('Loading farm state...');
+            try {
+                const response = await fetch(`${API_BASE_URL}/game-state`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                currentBoardState = await response.json();
+                updatePlotDisplay();
+                updateMessageBox('Farm state loaded. Select an action and tap a plot.');
+            } catch (error) {
+                console.error('Error fetching game state:', error);
+                updateMessageBox('Failed to load farm. Make sure the backend server is running.');
+            }
+        }
+
+        /**
+         * Initializes the game board structure (empty divs) and attaches event listeners.
+         * The actual state (empty/planted/etc.) will be filled by fetchGameState.
+         */
+        function initializeBoardStructure() {
+            gameBoardElement.innerHTML = ''; // Clear existing plots
+
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const plotElement = document.createElement('div');
+                    plotElement.classList.add('plot'); // Add base class
+                    plotElement.dataset.row = r;
+                    plotElement.dataset.col = c;
+
+                    // Add an overlay for action text on hover
+                    const actionOverlay = document.createElement('div');
+                    actionOverlay.classList.add('action-overlay');
+                    plotElement.appendChild(actionOverlay);
+
+                    plotElement.addEventListener('click', handlePlotClick);
+                    gameBoardElement.appendChild(plotElement);
+                }
+            }
+        }
+
+        /**
+         * Updates the visual representation of all plots based on currentBoardState.
+         */
+        function updatePlotDisplay() {
+            currentBoardState.forEach((row, r) => {
+                row.forEach((plot, c) => {
+                    const plotElement = gameBoardElement.querySelector(`[data-row="${r}"][data-col="${c}"]`);
+                    if (plotElement) {
+                        // Remove all state classes first
+                        plotElement.classList.remove('empty', 'planted', 'watered', 'ready');
+                        // Add the current state class from the backend data
+                        plotElement.classList.add(plot.state);
+
+                        // Update the action overlay text
+                        const actionOverlay = plotElement.querySelector('.action-overlay');
+                        if (actionOverlay) {
+                            switch (plot.state) {
+                                case 'empty':
+                                    actionOverlay.textContent = 'Plant';
+                                    break;
+                                case 'planted':
+                                    actionOverlay.textContent = 'Water';
+                                    break;
+                                case 'watered':
+                                    actionOverlay.textContent = 'Growing';
+                                    break;
+                                case 'ready':
+                                    actionOverlay.textContent = 'Harvest';
+                                    break;
+                            }
+                        }
+                    }
+                });
+            });
+        }
+
+        /**
+         * Updates the message box with a new message.
+         * @param {string} message - The message to display.
+         */
+        function updateMessageBox(message) {
+            messageBox.textContent = message;
+        }
+
+        /**
+         * Handles a click event on a plot, sending the action to the backend.
+         * @param {Event} event - The click event object.
+         */
+        async function handlePlotClick(event) {
+            const row = parseInt(event.currentTarget.dataset.row);
+            const col = parseInt(event.currentTarget.dataset.col);
+
+            let endpoint = '';
+            let actionName = '';
+
+            switch (currentAction) {
+                case 'plant':
+                    endpoint = '/plant';
+                    actionName = 'Planting';
+                    break;
+                case 'water':
+                    endpoint = '/water';
+                    actionName = 'Watering';
+                    break;
+                case 'harvest':
+                    endpoint = '/harvest';
+                    actionName = 'Harvesting';
+                    break;
+                default:
+                    updateMessageBox('Invalid action selected.');
+                    return;
+            }
+
+            updateMessageBox(`${actionName} at (${row}, ${col})...`);
+
+            try {
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ row, col }),
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    updateMessageBox(result.message);
+                    // After a successful action, re-fetch the game state to update the UI
+                    await fetchGameState();
+                } else {
+                    updateMessageBox(`Error: ${result.message}`);
+                }
+            } catch (error) {
+                console.error(`Error performing ${currentAction} action:`, error);
+                updateMessageBox(`Failed to perform action. Check server connection.`);
+            }
+        }
+
+        /**
+         * Sets the active action mode and updates button styling.
+         * @param {string} mode - The mode to set ('plant', 'water', 'harvest').
+         */
+        function setActiveMode(mode) {
+            currentAction = mode;
+
+            // Remove 'active' class from all buttons
+            plantModeBtn.classList.remove('active');
+            waterModeBtn.classList.remove('active');
+            harvestModeBtn.classList.remove('active');
+
+            // Add 'active' class to the clicked button
+            switch (mode) {
+                case 'plant':
+                    plantModeBtn.classList.add('active');
+                    updateMessageBox('Plant mode activated. Tap an empty plot to plant.');
+                    break;
+                case 'water':
+                    waterModeBtn.classList.add('active');
+                    updateMessageBox('Water mode activated. Tap a planted plot to water.');
+                    break;
+                case 'harvest':
+                    harvestModeBtn.classList.add('active');
+                    updateMessageBox('Harvest mode activated. Tap a ready plant to harvest.');
+                    break;
+            }
+        }
+
+        // Event listeners for action buttons
+        plantModeBtn.addEventListener('click', () => setActiveMode('plant'));
+        waterModeBtn.addEventListener('click', () => setActiveMode('water'));
+        harvestModeBtn.addEventListener('click', () => setActiveMode('harvest'));
+
+        // Initialize the game when the window loads
+        window.onload = async function() {
+            initializeBoardStructure(); // Create the plot elements
+            await fetchGameState();     // Get initial state from backend
+            setActiveMode('plant');     // Set initial mode
+        };
+    </script>
+</body>
+</html>
