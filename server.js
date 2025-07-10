@@ -1,12 +1,28 @@
+// server.js
+
 // Import necessary modules
 const express = require('express');
 const cors = require('cors');
 const storage = require('node-persist'); // For persistent storage
 const path = require('path'); // Node.js built-in module for path manipulation
+const http = require('http'); // Node.js built-in module for HTTP server
+const { Server } = require('socket.io'); // Socket.IO server
 
 // Initialize Express app
 const app = express();
 const PORT = 3000; // Port for your backend server
+
+// Create an HTTP server from the Express app
+const server = http.createServer(app);
+
+// Initialize Socket.IO server
+// Allow CORS for Socket.IO as well, matching your frontend's origin
+const io = new Server(server, {
+    cors: {
+        origin: "http://localhost:3000", // Or the specific origin of your frontend if different
+        methods: ["GET", "POST"]
+    }
+});
 
 // Middleware
 app.use(cors()); // Enable CORS for all routes, allowing your frontend to connect
@@ -17,6 +33,7 @@ app.use(express.json()); // Enable parsing of JSON request bodies
 // When a request comes for '/', it will look for 'index.html' in this directory.
 app.use(express.static(path.join(__dirname, 'frontend')));
 
+
 // --- Game Configuration (should match frontend) ---
 const ROWS = 4;
 const COLS = 5;
@@ -24,6 +41,23 @@ const GROWTH_TIME_MS = 5000; // Time for a watered plant to grow to harvestable 
 
 // --- Game State (will be loaded from storage) ---
 let gameBoard = [];
+
+/**
+ * Emits the current game board state to all connected Socket.IO clients.
+ * This function is called whenever the game state changes on the backend.
+ */
+function emitGameStateUpdate() {
+    // Send a deep copy and remove non-serializable properties before emitting
+    const serializableGameBoard = gameBoard.map(row =>
+        row.map(plot => {
+            const newPlot = { ...plot };
+            delete newPlot.growthTimeout; // Remove the timeout ID
+            return newPlot;
+        })
+    );
+    io.emit('gameStateUpdated', serializableGameBoard);
+    console.log('Emitted gameStateUpdated event.');
+}
 
 /**
  * Initializes the node-persist storage and loads the game state.
@@ -59,7 +93,9 @@ async function initStorageAndLoadGameState() {
                         plot.growthTimeout = setTimeout(async () => {
                             if (gameBoard[r][c].state === 'watered') {
                                 gameBoard[r][c].state = 'ready';
+                                gameBoard[r][c].growthTimeout = null; // Clear timeout reference
                                 await saveGameBoard(); // Save updated state
+                                emitGameStateUpdate(); // Notify frontend of the change
                                 console.log(`Plant at (${r}, ${c}) is now ready (re-established timeout).`);
                             }
                         }, remainingGrowthTime);
@@ -117,6 +153,7 @@ async function saveGameBoard() {
 /**
  * GET /api/game-state
  * Returns the current state of the game board.
+ * This endpoint is primarily for initial load; real-time updates are via Socket.IO.
  */
 app.get('/api/game-state', (req, res) => {
     // Send a deep copy to prevent accidental modification outside this scope
@@ -147,6 +184,7 @@ app.post('/api/plant', async (req, res) => {
             plot.growthTimeout = null;
         }
         await saveGameBoard();
+        emitGameStateUpdate(); // Notify frontend of the change
         res.json({ success: true, message: `Seed planted at (${row}, ${col}).` });
     } else {
         res.status(400).json({ success: false, message: 'Plot is not empty.' });
@@ -185,11 +223,13 @@ app.post('/api/water', async (req, res) => {
                 gameBoard[row][col].state = 'ready';
                 gameBoard[row][col].growthTimeout = null; // Clear timeout reference
                 await saveGameBoard(); // Save the updated state
-                console.log(`Server: Plant at (${row}, ${col}) is now ready.`);
+                emitGameStateUpdate(); // Notify frontend of the change
+                console.log(`Server: Plant at (${row}, ${col}) is now ready.`); // Corrected: c changed to col
             }
         }, GROWTH_TIME_MS);
 
         await saveGameBoard(); // Save the state immediately after watering
+        emitGameStateUpdate(); // Notify frontend of the change
         res.json({ success: true, message: `Plant at (${row}, ${col}) watered. It will be ready in ${GROWTH_TIME_MS / 1000} seconds.` });
     } else if (plot.state === 'watered' || plot.state === 'ready') {
         res.status(400).json({ success: false, message: 'Plant is already watered or ready.' });
@@ -221,6 +261,7 @@ app.post('/api/harvest', async (req, res) => {
             plot.growthTimeout = null;
         }
         await saveGameBoard();
+        emitGameStateUpdate(); // Notify frontend of the change
         res.json({ success: true, message: `Plant at (${row}, ${col}) harvested.` });
     } else if (plot.state === 'empty') {
         res.status(400).json({ success: false, message: 'Nothing to harvest here. Plot is empty!' });
@@ -232,9 +273,10 @@ app.post('/api/harvest', async (req, res) => {
 // --- Server Start ---
 // Initialize storage and then start the server
 initStorageAndLoadGameState().then(() => {
-    app.listen(PORT, () => {
+    // Start the HTTP server (which Express is attached to)
+    server.listen(PORT, () => {
         console.log(`Farming game backend listening at http://localhost:${PORT}`);
-        console.log('Remember to update your frontend to fetch data from this backend!');
+        console.log(`Frontend served from http://localhost:${PORT}`);
     });
 }).catch(error => {
     console.error('Failed to initialize storage or load game state:', error);

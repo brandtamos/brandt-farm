@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Farming Game</title>
+    <!-- Socket.IO client library -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         /* Global styles */
         body {
@@ -127,7 +129,7 @@
         .plot.empty::before { content: '🕳️'; } /* Empty plot */
         .plot.planted::before { content: '🌱'; }
         .plot.watered::before { content: '🌿'; }
-        .plot.ready::before { content: '🌽'; } /* Ready to harvest */
+        .plot.ready::before { content: '�'; } /* Ready to harvest */
 
 
         /* Buttons container */
@@ -241,13 +243,15 @@
     <script>
         // Backend API base URL
         const API_BASE_URL = 'http://localhost:3000/api';
+        // Socket.IO server URL (same as backend)
+        const SOCKET_SERVER_URL = 'http://localhost:3000';
 
         // Game configuration (should match backend)
         const ROWS = 4;
         const COLS = 5;
 
-        // Game state (will be fetched from backend)
-        let currentBoardState = []; // Stores the current state received from the backend
+        // Game state (will be fetched from backend and updated via Socket.IO)
+        let currentBoardState = [];
         let currentAction = 'plant'; // 'plant', 'water', or 'harvest'
 
         // DOM elements
@@ -257,28 +261,12 @@
         const waterModeBtn = document.getElementById('water-mode-btn');
         const harvestModeBtn = document.getElementById('harvest-mode-btn');
 
-        /**
-         * Fetches the current game state from the backend and updates the display.
-         */
-        async function fetchGameState() {
-            updateMessageBox('Loading farm state...');
-            try {
-                const response = await fetch(`${API_BASE_URL}/game-state`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                currentBoardState = await response.json();
-                updatePlotDisplay();
-                updateMessageBox('Farm state loaded. Select an action and tap a plot.');
-            } catch (error) {
-                console.error('Error fetching game state:', error);
-                updateMessageBox('Failed to load farm. Make sure the backend server is running.');
-            }
-        }
+        // Initialize Socket.IO client
+        const socket = io(SOCKET_SERVER_URL);
 
         /**
          * Initializes the game board structure (empty divs) and attaches event listeners.
-         * The actual state (empty/planted/etc.) will be filled by fetchGameState.
+         * The actual state (empty/planted/etc.) will be filled by Socket.IO updates.
          */
         function initializeBoardStructure() {
             gameBoardElement.innerHTML = ''; // Clear existing plots
@@ -356,6 +344,7 @@
             let endpoint = '';
             let actionName = '';
 
+            // Determine the correct endpoint based on current action mode
             switch (currentAction) {
                 case 'plant':
                     endpoint = '/plant';
@@ -389,8 +378,7 @@
 
                 if (result.success) {
                     updateMessageBox(result.message);
-                    // After a successful action, re-fetch the game state to update the UI
-                    await fetchGameState();
+                    // No need to call fetchGameState() here, Socket.IO will push updates
                 } else {
                     updateMessageBox(`Error: ${result.message}`);
                 }
@@ -434,12 +422,52 @@
         waterModeBtn.addEventListener('click', () => setActiveMode('water'));
         harvestModeBtn.addEventListener('click', () => setActiveMode('harvest'));
 
+        // --- Socket.IO Event Listeners ---
+        socket.on('connect', () => {
+            console.log('Connected to Socket.IO server!');
+            updateMessageBox('Connected to farm. Loading state...');
+            // When connected, request the initial state (or rely on server to push it)
+            // For robustness, we can still do an initial fetch or just wait for the first push.
+            // The backend is set up to emit on connection, but a direct fetch ensures consistency.
+            fetch(`${API_BASE_URL}/game-state`)
+                .then(response => response.json())
+                .then(data => {
+                    currentBoardState = data;
+                    updatePlotDisplay();
+                    updateMessageBox('Farm state loaded. Select an action and tap a plot.');
+                })
+                .catch(error => {
+                    console.error('Error fetching initial game state via HTTP:', error);
+                    updateMessageBox('Failed to load initial farm state.');
+                });
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from Socket.IO server.');
+            updateMessageBox('Disconnected from farm. Please refresh or check server.');
+        });
+
+        socket.on('gameStateUpdated', (newBoardState) => {
+            console.log('Received gameStateUpdated event:', newBoardState);
+            currentBoardState = newBoardState;
+            updatePlotDisplay();
+            // You can add more specific messages here if needed, e.g., for growth
+            // updateMessageBox('Farm updated!');
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('Socket.IO connection error:', error);
+            updateMessageBox('Could not connect to farm server. Is it running?');
+        });
+
+
         // Initialize the game when the window loads
         window.onload = async function() {
             initializeBoardStructure(); // Create the plot elements
-            await fetchGameState();     // Get initial state from backend
             setActiveMode('plant');     // Set initial mode
+            // Initial state will be loaded via Socket.IO's 'connect' event or initial HTTP fetch.
         };
     </script>
 </body>
 </html>
+�
